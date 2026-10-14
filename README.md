@@ -90,6 +90,7 @@ Built with **Material 3 Expressive**, LastWave combines effortless ad-free strea
 | Icon | Feature | Highlight |
 |:---:|:---|:---|
 | <img src="https://api.iconify.design/lucide:play-circle.svg?color=%23FF0000" width="20" height="20" /> | **YouTube Music Client** | Stream tracks, albums, artists, and public playlists from YouTube Music with zero ads and background playback. |
+| <img src="https://api.iconify.design/lucide:folder-music.svg?color=%23C6F100" width="20" height="20" /> | **Local Audio Playback** | Discover and play audio files stored on device storage or SD card (MP3, FLAC, M4A, AAC, WAV, OGG, OPUS) with full queue, player UI, and lockscreen controls. |
 | <img src="https://api.iconify.design/lucide:wand-2.svg?color=%23C6F100" width="20" height="20" /> | **Smart Playlist Generator** | Algorithmic taste mixes and mood radios generated from your listening history, seed artists, loved tracks, and top genres. |
 | <img src="https://api.iconify.design/lucide:radio.svg?color=%23D51007" width="20" height="20" /> | **Universal Last.fm Scrobbler** | Built-in media scrobbler tracking listening activity across YouTube Music, Spotify, Apple Music, and local players with zero battery drain. |
 | <img src="https://api.iconify.design/lucide:mic.svg?color=%23FFB4A2" width="20" height="20" /> | **Real-Time Synced Lyrics** | Millisecond-accurate animated karaoke lyrics powered by LRCLIB with 8 customizable fluid physics motions. |
