@@ -457,10 +457,12 @@ fun TrackContextMenuSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (target is TrackMenuTarget.Track) {
-                StartMixCard {
-                    if (onStartMix != null) onStartMix(target.name, target.artist)
-                    else startMixViewModel.startMix(target.name, target.artist, playableTrack?.videoId)
-                    onDismiss()
+                if (playableTrack?.isLocal != true) {
+                    StartMixCard {
+                        if (onStartMix != null) onStartMix(target.name, target.artist)
+                        else startMixViewModel.startMix(target.name, target.artist, playableTrack?.videoId)
+                        onDismiss()
+                    }
                 }
 
                 val playable = playableTrack ?: PlayableTrack(title = target.name, artist = target.artist)
@@ -509,41 +511,43 @@ fun TrackContextMenuSheet(
                             }
                         }
                     }
-                    val downloadKey = com.lastwave.app.data.download.TrackDownloadManager.makeDownloadKey(t.name, t.artist)
-                    val isDownloading = activeDownloads[downloadKey]?.let { !it.isFinished } == true
-                    add { pos ->
-                        when {
-                            isDownloaded -> {
-                                MenuActionRow(Icons.Filled.CheckCircle, "Downloaded", position = pos) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Track is already downloaded",
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                    onDismiss()
+                    if (playableTrack?.isLocal != true) {
+                        val downloadKey = com.lastwave.app.data.download.TrackDownloadManager.makeDownloadKey(t.name, t.artist)
+                        val isDownloading = activeDownloads[downloadKey]?.let { !it.isFinished } == true
+                        add { pos ->
+                            when {
+                                isDownloaded -> {
+                                    MenuActionRow(Icons.Filled.CheckCircle, "Downloaded", position = pos) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Track is already downloaded",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                        onDismiss()
+                                    }
                                 }
-                            }
-                            isDownloading -> {
-                                MenuActionRow(Icons.Filled.Download, "Downloading\u2026", position = pos) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Download is in progress",
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                    onDismiss()
+                                isDownloading -> {
+                                    MenuActionRow(Icons.Filled.Download, "Downloading\u2026", position = pos) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Download is in progress",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                        onDismiss()
+                                    }
                                 }
-                            }
-                            else -> {
-                                MenuActionRow(Icons.Filled.Download, downloadLabel, position = pos) {
-                                    downloadViewModel.download(
-                                        title = t.name,
-                                        artist = t.artist,
-                                        album = playable.album,
-                                        artworkUrl = playable.artworkUrl,
-                                        videoId = playable.videoId,
-                                        durationMs = playable.durationMs,
-                                    )
-                                    onDismiss()
+                                else -> {
+                                    MenuActionRow(Icons.Filled.Download, downloadLabel, position = pos) {
+                                        downloadViewModel.download(
+                                            title = t.name,
+                                            artist = t.artist,
+                                            album = playable.album,
+                                            artworkUrl = playable.artworkUrl,
+                                            videoId = playable.videoId,
+                                            durationMs = playable.durationMs,
+                                        )
+                                        onDismiss()
+                                    }
                                 }
                             }
                         }
@@ -559,7 +563,9 @@ fun TrackContextMenuSheet(
                             PlayerCastMenuRow(musicPlayer)
                         }
                     }
-                    add { pos -> MenuActionRow(Icons.Filled.Language, "Open in Last.fm", position = pos) { openUrl(context, buildLastFmUrl(target)); onDismiss() } }
+                    if (playableTrack?.isLocal != true || (t.artist.isNotBlank() && t.artist != "Unknown Artist")) {
+                        add { pos -> MenuActionRow(Icons.Filled.Language, "Open in Last.fm", position = pos) { openUrl(context, buildLastFmUrl(target)); onDismiss() } }
+                    }
                     if (onRefreshArtwork != null) {
                         add { pos -> MenuActionRow(Icons.Filled.Refresh, "Refresh Cover Art", position = pos) { onRefreshArtwork(); onDismiss() } }
                     }
@@ -571,10 +577,12 @@ fun TrackContextMenuSheet(
                             showDetailsSheet = true
                         }
                     }
-                    add { pos ->
-                        MenuActionRow(Icons.Filled.ThumbDown, "Don't recommend again", danger = true, position = pos) {
-                            exclusionViewModel.exclude(t.name, t.artist)
-                            onDismiss()
+                    if (playableTrack?.isLocal != true) {
+                        add { pos ->
+                            MenuActionRow(Icons.Filled.ThumbDown, "Don't recommend again", danger = true, position = pos) {
+                                exclusionViewModel.exclude(t.name, t.artist)
+                                onDismiss()
+                            }
                         }
                     }
                     if (onRemoveFromPlaylist != null) {

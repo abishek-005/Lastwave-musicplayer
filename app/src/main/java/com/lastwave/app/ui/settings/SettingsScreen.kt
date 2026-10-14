@@ -95,6 +95,7 @@ import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -417,6 +418,7 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     onLoggedOut: () -> Unit = {},
     onOpenDownloads: () -> Unit = {},
+    onOpenLocalSongs: () -> Unit = {},
     onOpenModules: () -> Unit = {},
     onOpenHomeSections: () -> Unit = {},
     onOpenExcludedSongs: () -> Unit = {},
@@ -1577,8 +1579,35 @@ fun SettingsScreen(
                             }
                         }
 
-
-
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                SectionLabel("Device & Offline Audio")
+                                SettingsGroup(rowCount = 2) { index, position ->
+                                    when (index) {
+                                        0 -> SettingsActionCard(
+                                            icon = Icons.Filled.Folder,
+                                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            title = "Local Songs",
+                                            subtitle = "Scan and play audio files on your phone / SD card",
+                                            onClick = onOpenLocalSongs,
+                                            position = position,
+                                            isHighlighted = (highlightedSettingId == "library.local_songs"),
+                                        )
+                                        else -> SettingsActionCard(
+                                            icon = Icons.Filled.Download,
+                                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            title = "Downloads",
+                                            subtitle = if (downloadCount > 0) "$downloadCount songs downloaded" else "Manage downloaded offline songs",
+                                            onClick = onOpenDownloads,
+                                            position = position,
+                                            isHighlighted = (highlightedSettingId == "library.downloads"),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     SettingsTab.DATA_BACKUP -> {

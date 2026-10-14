@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
@@ -144,6 +145,7 @@ fun FeedScreen(
     onOpenGenerator: () -> Unit = {},
     onOpenFriends: () -> Unit = {},
     onOpenDownloads: () -> Unit = {},
+    onOpenLocalSongs: () -> Unit = {},
     onOpenFriendProfile: (username: String, displayName: String?, avatarUrl: String?) -> Unit = { _, _, _ -> },
     onOpenNewReleases: () -> Unit = {},
     viewModel: FeedViewModel = hiltViewModel(),
@@ -208,6 +210,7 @@ fun FeedScreen(
             ExpressiveHeader(
                 title = "Home",
                 actions = {
+                    HeaderActionIcon(Icons.Filled.Folder, "Local Songs", onOpenLocalSongs)
                     HeaderActionIcon(Icons.Filled.Download, "Downloads", onOpenDownloads)
                     HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)
                     IconButton(onClick = onOpenSettings) {
