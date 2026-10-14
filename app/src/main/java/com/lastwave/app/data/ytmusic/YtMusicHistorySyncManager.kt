@@ -145,7 +145,7 @@ class YtMusicHistorySyncManager @Inject constructor(
         ) {
             listenedMs += minOf(delta, elapsed)
         }
-        if (track == null || !advancing || listenedMs < requiredListenMs(s.durationMs)) return
+        if (track == null || track.isLocal || track.playbackUrl != null || !advancing || listenedMs < requiredListenMs(s.durationMs)) return
         submittedSessionId = sessionId
         Log.d(TAG, "Listen qualified after ${listenedMs / 1000}s; preparing history submission")
         launchSubmit(
