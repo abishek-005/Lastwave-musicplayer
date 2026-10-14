@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Local Audio Playback:** Added comprehensive on-device music discovery and playback. Users can scan device storage and custom folders to play MP3, FLAC, M4A, AAC, WAV, OGG, and OPUS files using LastWave's unified ExoPlayer engine with full player sheet UI, queue support, notification controls, and lockscreen playback without remote streaming dependencies.
+  - Files changed: `app/src/main/AndroidManifest.xml`, `LocalAudioRepository.kt`, `LocalAudioTrack.kt`, `LocalSongsScreen.kt`, `LocalSongsViewModel.kt`, `MusicPlayer.kt`, `TrackContextMenuSheet.kt`, `YtMusicHistorySyncManager.kt`, `Screen.kt`, `NavGraph.kt`, `HomeScreen.kt`, `FeedScreen.kt`, `PlaylistScreen.kt`, `SettingsScreen.kt`, `MainShell.kt`, `LocalAudioTrackTest.kt`.
+
 ## [4.2.4] - 2026-10-05
 
 ### Added & Improved
