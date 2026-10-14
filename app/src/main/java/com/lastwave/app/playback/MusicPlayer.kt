@@ -126,6 +126,7 @@ data class PlayableTrack(
     val playbackUrl: String? = null,
     val playbackMimeType: String? = null,
     val durationMs: Long? = null,
+    val isLocal: Boolean = false,
 )
 
 @Serializable
@@ -3982,7 +3983,7 @@ class MusicPlayer @Inject constructor(
     }
 
     private fun preloadNextTrack(nextIndex: Int, nextTrack: PlayableTrack?) {
-        if (nextTrack == null || nextTrack.playbackUrl != null) return
+        if (nextTrack == null || nextTrack.isLocal || nextTrack.playbackUrl != null) return
         val identity = nextTrack.playbackIdentity() ?: return
         if (streamResolver.playback.requested == identity) return
         warmArtwork(nextTrack)
@@ -4483,6 +4484,7 @@ class MusicPlayer @Inject constructor(
     }
 
     private fun startRadioQueue(seed: PlayableTrack, resumePlaybackImmediately: Boolean = false) {
+        if (seed.isLocal || !seed.playbackUrl.isNullOrBlank()) return
         radioQueueLoadJob?.cancel()
         radioUsedSeeds.clear()
         seed.videoId?.takeIf(String::isNotBlank)?.let { radioUsedSeeds.add(it) }
@@ -5411,6 +5413,24 @@ class MusicPlayer @Inject constructor(
         Unbounded,
     }
 
+    private suspend fun resolveLocalTrackDirectly(track: PlayableTrack): ResolvedStream? {
+        val url = track.playbackUrl ?: return null
+        val built = checkAndBuildLocalStream(
+            targetUrl = url,
+            displayTitle = track.title,
+            displayArtist = track.artist,
+            fallbackMime = track.playbackMimeType,
+        )
+        if (built != null) return built
+        return ResolvedStream(
+            url = url,
+            mimeType = track.playbackMimeType ?: "audio/*",
+            bitrateKbps = null,
+            audioCodec = "LOCAL AUDIO",
+            cacheKey = "local:$url",
+        )
+    }
+
     private suspend fun resolveTrackAudioStream(
         track: PlayableTrack,
         videoId: String?,
@@ -5419,6 +5439,10 @@ class MusicPlayer @Inject constructor(
         allowLocalDownloads: Boolean = true,
         losslessBudget: LosslessBudget = LosslessBudget.Interactive,
     ): ResolvedStream = withContext(Dispatchers.IO) {
+        if (track.isLocal || !track.playbackUrl.isNullOrBlank()) {
+            val localStream = resolveLocalTrackDirectly(track)
+            if (localStream != null) return@withContext localStream
+        }
         val identityKey = track.playbackIdentity()?.cacheKey
             ?: track.internalTrackId?.takeIf { it.isNotBlank() }
             ?: videoId?.takeIf { it.isNotBlank() }
@@ -5459,6 +5483,10 @@ class MusicPlayer @Inject constructor(
         videoId: String?,
         allowLocalDownloads: Boolean = true,
     ): ResolvedStream {
+        if (track.isLocal || !track.playbackUrl.isNullOrBlank()) {
+            val localStream = resolveLocalTrackDirectly(track)
+            if (localStream != null) return localStream
+        }
         val directId = videoId?.takeIf { it.isNotBlank() } ?: track.videoId?.takeIf { it.isNotBlank() }
         val identity = directId?.let { id ->
             TrackIdentity(track.internalTrackId?.takeIf { it.isNotBlank() } ?: id, id)
@@ -5891,6 +5919,7 @@ class MusicPlayer @Inject constructor(
         generation: Long,
         currentStream: ResolvedStream,
     ) {
+        if (track.isLocal || !track.playbackUrl.isNullOrBlank() || expectedMediaId.startsWith("local:")) return
         if (expectedMediaId == activeUpgradeMediaId && activeUpgradeJob?.isActive == true) {
             android.util.Log.i("MusicPlayer", "[STREAM UPGRADE] already running for '${track.title}'")
             return
@@ -7197,6 +7226,7 @@ private fun PlayableTrack.toMediaItem(resolved: MusicPlayer.ResolvedStream? = nu
                         val d = durationMs ?: resolved?.durationMs
                         if (d != null && d > 0L) putLong("durationMs", d)
                         internalTrackId?.takeIf { it.isNotBlank() }?.let { putString("internalTrackId", it) }
+                        putBoolean("isLocal", isLocal)
                     }
                 )
                 .build(),
@@ -7218,6 +7248,9 @@ private fun MediaItem.toPlayableTrack(): PlayableTrack {
         else -> null
     }
     val dur = mediaMetadata.extras?.getLong("durationMs")?.takeIf { it > 0L }
+    val localFlag = mediaMetadata.extras?.getBoolean("isLocal") == true ||
+        localUri?.startsWith("content://") == true ||
+        mediaId.startsWith("local:content://")
     return PlayableTrack(
         title = mediaMetadata.title?.toString().orEmpty().ifBlank { "Unknown track" },
         artist = mediaMetadata.artist?.toString().orEmpty().ifBlank { "Unknown artist" },
@@ -7228,6 +7261,7 @@ private fun MediaItem.toPlayableTrack(): PlayableTrack {
         playbackUrl = localUri,
         playbackMimeType = localConfiguration?.mimeType,
         durationMs = dur,
+        isLocal = localFlag,
     )
 }
 

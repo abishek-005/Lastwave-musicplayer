@@ -25,6 +25,13 @@ FetchContent_Declare(
 FetchContent_GetProperties(soxr_source)
 if(NOT soxr_source_POPULATED)
     FetchContent_Populate(soxr_source)
+    # Fix soxr 0.1.3 CMakeLists.txt path with spaces breaking cmake_dependent_option
+    file(READ "${soxr_source_SOURCE_DIR}/CMakeLists.txt" SOXR_CMAKELISTS)
+    string(REGEX REPLACE "cmake_dependent_option[ \t\r\n]*\\([ \t\r\n]*BUILD_LSR_TESTS[^\\)]*\\)" "option(BUILD_LSR_TESTS \"Build LSR tests.\" OFF)" SOXR_CMAKELISTS "${SOXR_CMAKELISTS}")
+    string(REPLACE "EXISTS \${PROJECT_SOURCE_DIR}/lsr-tests" "FALSE" SOXR_CMAKELISTS "${SOXR_CMAKELISTS}")
+    string(REPLACE "EXISTS \"\${PROJECT_SOURCE_DIR}/lsr-tests\"" "FALSE" SOXR_CMAKELISTS "${SOXR_CMAKELISTS}")
+    file(WRITE "${soxr_source_SOURCE_DIR}/CMakeLists.txt" "${SOXR_CMAKELISTS}")
+
     list(APPEND CMAKE_MODULE_PATH "${soxr_source_SOURCE_DIR}/cmake/Modules")
     set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
