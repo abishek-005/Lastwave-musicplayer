@@ -34,6 +34,9 @@ data class GeneratedTrack(
     val playcount: Long? = null,
     val match: Double? = null,
     val album: String? = null,
+    val isLocal: Boolean = false,
+    val durationMs: Long? = null,
+    val mimeType: String? = null,
 ) {
     /**
      * Normalized identity: trimmed, inner whitespace collapsed, lowercased.
@@ -60,6 +63,13 @@ fun GeneratedTrack.sameSongAs(other: GeneratedTrack): Boolean {
     val mine = youtubeVideoIdOrNull()
     val theirs = other.youtubeVideoIdOrNull()
     if (mine != null && mine == theirs) return true
+    if (isLocal || other.isLocal) {
+        if (isLocal && other.isLocal) {
+            if (url.isNotBlank() && other.url.isNotBlank() && url == other.url) return true
+            if (key == other.key) return true
+        }
+        return false
+    }
     if (key == other.key) return true
     return name.trim().equals(other.name.trim(), ignoreCase = true) &&
         artist.trim().equals(other.artist.trim(), ignoreCase = true)
@@ -91,6 +101,7 @@ suspend fun List<GeneratedTrack>.pinnedWithVideoIds(
     val limiter = Semaphore(concurrency)
     map { track ->
         async {
+            if (track.isLocal) return@async track
             if (track.youtubeVideoIdOrNull() != null) return@async track
             if (track.name.isBlank()) return@async null
             limiter.withPermit {
@@ -124,10 +135,32 @@ data class StoredTrack(
     val url: String = "",
     val image: String? = null,
     val album: String? = null,
+    val isLocal: Boolean = false,
+    val durationMs: Long? = null,
+    val mimeType: String? = null,
 )
 
-fun GeneratedTrack.toStored() = StoredTrack(name = name, artist = artist, url = url, image = artworkUrl, album = album)
-fun StoredTrack.toGenerated() = GeneratedTrack(name = name, artist = artist, artworkUrl = image, url = url, album = album)
+fun GeneratedTrack.toStored() = StoredTrack(
+    name = name,
+    artist = artist,
+    url = url,
+    image = artworkUrl,
+    album = album,
+    isLocal = isLocal,
+    durationMs = durationMs,
+    mimeType = mimeType,
+)
+
+fun StoredTrack.toGenerated() = GeneratedTrack(
+    name = name,
+    artist = artist,
+    artworkUrl = image,
+    url = url,
+    album = album,
+    isLocal = isLocal,
+    durationMs = durationMs,
+    mimeType = mimeType,
+)
 
 fun GeneratedTrack.youtubeVideoIdOrNull(): String? {
     val value = url.trim()

@@ -5,6 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lastwave.app.data.local.LocalAudioRepository
 import com.lastwave.app.data.local.LocalAudioTrack
+import com.lastwave.app.data.local.LocalSongSortOption
+import com.lastwave.app.data.local.SettingsPreferences
+import com.lastwave.app.data.local.toGeneratedTrack
+import com.lastwave.app.data.playlist.PlaylistRepository
+import com.lastwave.app.data.playlist.SavedPlaylist
 import com.lastwave.app.playback.MusicPlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +18,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -23,15 +31,6 @@ enum class LocalAudioPermissionState {
     GRANTED,
     DENIED,
     PERMANENTLY_DENIED,
-}
-
-enum class LocalSongSortOption(val label: String) {
-    TITLE_AZ("Title (A-Z)"),
-    ARTIST_AZ("Artist (A-Z)"),
-    ALBUM_AZ("Album (A-Z)"),
-    RECENT("Recently Added"),
-    DURATION_DESC("Duration"),
-    SIZE_DESC("File Size"),
 }
 
 enum class LocalTab(val label: String) {
@@ -59,6 +58,8 @@ data class LocalAlbum(
 class LocalSongsViewModel @Inject constructor(
     private val repository: LocalAudioRepository,
     private val musicPlayer: MusicPlayer,
+    private val settingsPreferences: SettingsPreferences,
+    private val playlistRepository: PlaylistRepository,
 ) : ViewModel() {
 
     private val _permissionState = MutableStateFlow(LocalAudioPermissionState.CHECKING)
@@ -71,7 +72,86 @@ class LocalSongsViewModel @Inject constructor(
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     val searchQuery = MutableStateFlow("")
-    val sortOption = MutableStateFlow(LocalSongSortOption.TITLE_AZ)
+    val sortOption = MutableStateFlow(LocalSongSortOption.fromId(settingsPreferences.readLocalSongSortSync()))
+
+    private val _selectedTrackIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedTrackIds: StateFlow<Set<Long>> = _selectedTrackIds.asStateFlow()
+    val isSelectionMode: StateFlow<Boolean> = _selectedTrackIds
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val playlists: StateFlow<List<SavedPlaylist>> = playlistRepository.playlists
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            settingsPreferences.localSongSort
+                .distinctUntilChanged()
+                .collect { saved ->
+                    if (sortOption.value != saved) {
+                        sortOption.value = saved
+                    }
+                }
+        }
+    }
+
+    fun setSortOption(option: LocalSongSortOption) {
+        sortOption.value = option
+        viewModelScope.launch {
+            settingsPreferences.setLocalSongSort(option)
+        }
+    }
+
+    fun toggleTrackSelection(trackId: Long) {
+        _selectedTrackIds.update { current ->
+            if (trackId in current) current - trackId else current + trackId
+        }
+    }
+
+    fun selectTrack(trackId: Long) {
+        _selectedTrackIds.update { it + trackId }
+    }
+
+    fun selectAll() {
+        val allIds = filteredTracks.value.map { it.id }.toSet()
+        _selectedTrackIds.value = allIds
+    }
+
+    fun clearSelection() {
+        _selectedTrackIds.value = emptySet()
+    }
+
+    fun addSelectedToPlaylist(
+        playlistId: Long,
+        onResult: (added: Int, skipped: Int, playlistTitle: String) -> Unit,
+    ) {
+        val selectedTracks = filteredTracks.value.filter { it.id in _selectedTrackIds.value }
+        if (selectedTracks.isEmpty()) return
+        val generatedTracks = selectedTracks.map { it.toGeneratedTrack() }
+        viewModelScope.launch {
+            val result = playlistRepository.addTracks(playlistId, generatedTracks)
+            val title = result.playlist?.title ?: "Playlist"
+            clearSelection()
+            onResult(result.addedCount, result.duplicateCount, title)
+        }
+    }
+
+    fun createPlaylistWithSelected(
+        title: String,
+        onResult: (added: Int, skipped: Int, playlistTitle: String) -> Unit,
+    ) {
+        val cleanTitle = title.trim()
+        if (cleanTitle.isBlank()) return
+        val selectedTracks = filteredTracks.value.filter { it.id in _selectedTrackIds.value }
+        if (selectedTracks.isEmpty()) return
+        val generatedTracks = selectedTracks.map { it.toGeneratedTrack() }
+        viewModelScope.launch {
+            val created = playlistRepository.createCustom(cleanTitle)
+            val result = playlistRepository.addTracks(created.id, generatedTracks)
+            clearSelection()
+            onResult(result.addedCount, result.duplicateCount, created.title)
+        }
+    }
 
     val filteredTracks: StateFlow<List<LocalAudioTrack>> = combine(
         _rawTracks,

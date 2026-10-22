@@ -1315,6 +1315,15 @@ private fun NativeTrackRow(
     onMenu: () -> Unit,
     dragHandle: (@Composable () -> Unit)? = null,
 ) {
+    val context = LocalContext.current
+    val isUnavailable = remember(track) {
+        if (track.isLocal) {
+            !com.lastwave.app.data.local.LocalPlaylistHelper.isLocalTrackAccessible(context, track.url)
+        } else {
+            false
+        }
+    }
+
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val rowScale by animateFloatAsState(
@@ -1343,6 +1352,7 @@ private fun NativeTrackRow(
             .graphicsLayer {
                 scaleX = rowScale
                 scaleY = rowScale
+                if (isUnavailable) alpha = 0.5f
             }
     } else {
         Modifier
@@ -1351,6 +1361,7 @@ private fun NativeTrackRow(
             .graphicsLayer {
                 scaleX = rowScale
                 scaleY = rowScale
+                if (isUnavailable) alpha = 0.5f
             }
     }
 
@@ -1365,7 +1376,17 @@ private fun NativeTrackRow(
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
-                    onClick = onClick,
+                    onClick = {
+                        if (isUnavailable) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Local song file is missing or deleted from this device",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        } else {
+                            onClick()
+                        }
+                    },
                     onLongClick = if (dragHandle != null) null else onMenu,
                 )
                 .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -1404,14 +1425,46 @@ private fun NativeTrackRow(
 
             // Title & Artist
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = track.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
-                    color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
+                        color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (isUnavailable) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                        ) {
+                            Text(
+                                text = "Unavailable",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                    } else if (track.isLocal) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Text(
+                                text = "Local",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = track.artist,

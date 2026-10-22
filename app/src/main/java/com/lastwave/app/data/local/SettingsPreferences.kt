@@ -171,6 +171,8 @@ data class MiscSettings(
     val canvasFullBleed: Boolean = true,
     /** When true, canvas video loops may be fetched over cellular data. */
     val canvasOverCellular: Boolean = true,
+    /** Selected sort option for Local Songs screen ([LocalSongSortOption.id]). */
+    val localSongSort: String = LocalSongSortOption.TITLE_AZ.id,
 )
 
 /** Toggleable sections of the Home tab (see FeedScreen). Hero greeting and
@@ -275,6 +277,7 @@ class SettingsPreferences @Inject constructor(
         val CANVAS_ENABLED = booleanPreferencesKey("lw_canvas_enabled")
         val CANVAS_FULL_BLEED = booleanPreferencesKey("lw_canvas_full_bleed")
         val CANVAS_OVER_CELLULAR = booleanPreferencesKey("lw_canvas_over_cellular")
+        val LOCAL_SONG_SORT = stringPreferencesKey("lw_local_song_sort")
     }
 
     val settings: Flow<MiscSettings> = dataStore.data
@@ -319,6 +322,7 @@ class SettingsPreferences @Inject constructor(
                 canvasEnabled = p.readSafely(Keys.CANVAS_ENABLED) ?: true,
                 canvasFullBleed = p.readSafely(Keys.CANVAS_FULL_BLEED) ?: true,
                 canvasOverCellular = p.readSafely(Keys.CANVAS_OVER_CELLULAR) ?: true,
+                localSongSort = p.readSafely(Keys.LOCAL_SONG_SORT) ?: LocalSongSortOption.TITLE_AZ.id,
             )
         }
 
@@ -527,6 +531,27 @@ class SettingsPreferences @Inject constructor(
 
     suspend fun setCanvasOverCellular(enabled: Boolean) {
         dataStore.edit { it[Keys.CANVAS_OVER_CELLULAR] = enabled }
+    }
+
+    val localSongSort: Flow<LocalSongSortOption> = settings
+        .map { LocalSongSortOption.fromId(it.localSongSort) }
+
+    fun readLocalSongSortSync(): String =
+        runCatching {
+            appContext.getSharedPreferences(AppLanguage.SYNC_FILE, Context.MODE_PRIVATE)
+                .getString("lw_local_song_sort", LocalSongSortOption.TITLE_AZ.id)
+        }.getOrNull() ?: LocalSongSortOption.TITLE_AZ.id
+
+    suspend fun setLocalSongSort(sortOption: LocalSongSortOption) {
+        dataStore.edit { it[Keys.LOCAL_SONG_SORT] = sortOption.id }
+        withContext(Dispatchers.IO) {
+            runCatching {
+                appContext.getSharedPreferences(AppLanguage.SYNC_FILE, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("lw_local_song_sort", sortOption.id)
+                    .commit()
+            }
+        }
     }
 
     private companion object {

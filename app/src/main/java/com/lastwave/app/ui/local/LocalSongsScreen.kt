@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -42,8 +45,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
@@ -54,10 +59,14 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,10 +76,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import com.lastwave.app.data.local.LocalSongSortOption
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -148,6 +161,17 @@ fun LocalSongsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var selectedDetailsTrack by remember { mutableStateOf<LocalAudioTrack?>(null) }
 
+    val selectedTrackIds by viewModel.selectedTrackIds.collectAsStateWithLifecycle()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
+    val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    var showAddToPlaylistSheet by remember { mutableStateOf(false) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+
+    BackHandler(enabled = isSelectionMode) {
+        viewModel.clearSelection()
+    }
+
     val requiredPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
     } else {
@@ -184,7 +208,7 @@ fun LocalSongsScreen(
     }
 
     PredictiveBackScreen(
-        enabled = onBack != null,
+        enabled = onBack != null && !isSelectionMode,
         onBack = { onBack?.invoke() },
     ) {
         Box(
@@ -193,30 +217,59 @@ fun LocalSongsScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header Bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                // Header Bar (Selection Mode vs Normal)
+                if (isSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                        }
+                        Text(
+                            text = "${selectedTrackIds.size} selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp),
+                        )
+                        TextButton(onClick = { viewModel.selectAll() }) {
+                            Text("Select all")
+                        }
+                        IconButton(
+                            onClick = { showAddToPlaylistSheet = true },
+                            enabled = selectedTrackIds.isNotEmpty(),
+                        ) {
+                            Icon(Icons.Filled.PlaylistAdd, contentDescription = "Add to playlist")
                         }
                     }
-                    Text(
-                        text = "Local Songs",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f).padding(start = 8.dp),
-                    )
-                    IconButton(onClick = { viewModel.loadTracks() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                    }
-                    IconButton(onClick = { folderPicker.launch(null) }) {
-                        Icon(Icons.Filled.FolderOpen, contentDescription = "Choose Folder")
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                        Text(
+                            text = "Local Songs",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp),
+                        )
+                        IconButton(onClick = { viewModel.loadTracks() }) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                        }
+                        IconButton(onClick = { folderPicker.launch(null) }) {
+                            Icon(Icons.Filled.FolderOpen, contentDescription = "Choose Folder")
+                        }
                     }
                 }
 
@@ -280,57 +333,59 @@ fun LocalSongsScreen(
                     }
                 }
 
-                // Search Bar and Sort Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { viewModel.searchQuery.value = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Search local music...") },
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { viewModel.searchQuery.value = "" }) {
-                                    Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                if (!isSelectionMode) {
+                    // Search Bar and Sort Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.searchQuery.value = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Search local music...") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (searchQuery.isNotBlank()) {
+                                    IconButton(onClick = { viewModel.searchQuery.value = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                                    }
                                 }
+                            },
+                            singleLine = true,
+                            shape = CircleShape,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ),
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                             }
-                        },
-                        singleLine = true,
-                        shape = CircleShape,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ),
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false },
-                        ) {
-                            LocalSongSortOption.entries.forEach { opt ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            opt.label,
-                                            fontWeight = if (opt == sortOption) FontWeight.Bold else FontWeight.Normal,
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.sortOption.value = opt
-                                        showSortMenu = false
-                                    },
-                                )
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false },
+                            ) {
+                                LocalSongSortOption.entries.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                opt.label,
+                                                fontWeight = if (opt == sortOption) FontWeight.Bold else FontWeight.Normal,
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setSortOption(opt)
+                                            showSortMenu = false
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -382,32 +437,34 @@ fun LocalSongsScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            FilledTonalButton(
-                                                onClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    viewModel.playAll(startShuffled = true)
-                                                },
-                                                shape = CircleShape,
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                                modifier = Modifier.height(32.dp),
-                                            ) {
-                                                Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(4.dp))
-                                                Text("Shuffle", style = MaterialTheme.typography.labelMedium)
-                                            }
-                                            FilledTonalButton(
-                                                onClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    viewModel.playAll(startShuffled = false)
-                                                },
-                                                shape = CircleShape,
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                                modifier = Modifier.height(32.dp),
-                                            ) {
-                                                Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(4.dp))
-                                                Text("Play", style = MaterialTheme.typography.labelMedium)
+                                        if (!isSelectionMode) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        viewModel.playAll(startShuffled = true)
+                                                    },
+                                                    shape = CircleShape,
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                    modifier = Modifier.height(32.dp),
+                                                ) {
+                                                    Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text("Shuffle", style = MaterialTheme.typography.labelMedium)
+                                                }
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        viewModel.playAll(startShuffled = false)
+                                                    },
+                                                    shape = CircleShape,
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                    modifier = Modifier.height(32.dp),
+                                                ) {
+                                                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text("Play", style = MaterialTheme.typography.labelMedium)
+                                                }
                                             }
                                         }
                                     }
@@ -420,17 +477,41 @@ fun LocalSongsScreen(
                                     val isPlayingThis = playbackState.isPlaying &&
                                         playbackState.current?.title.equals(track.title, ignoreCase = true) &&
                                         playbackState.current?.artist.equals(track.artist, ignoreCase = true)
+                                    val isSelected = track.id in selectedTrackIds
 
                                     LocalTrackCard(
                                         track = track,
                                         isPlaying = isPlayingThis,
+                                        isSelected = isSelected,
+                                        isSelectionMode = isSelectionMode,
                                         position = groupPositionFor(index, tracks.size),
                                         onPlay = {
+                                            if (isSelectionMode) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.toggleTrackSelection(track.id)
+                                            } else {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.playTrack(track)
+                                            }
+                                        },
+                                        onToggleSelect = {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            viewModel.playTrack(track)
+                                            viewModel.toggleTrackSelection(track.id)
+                                        },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            if (isSelectionMode) {
+                                                viewModel.toggleTrackSelection(track.id)
+                                            } else {
+                                                viewModel.selectTrack(track.id)
+                                            }
                                         },
                                         onPlayNext = { viewModel.playNext(track) },
                                         onAddToQueue = { viewModel.addToQueue(track) },
+                                        onAddToPlaylist = {
+                                            viewModel.selectTrack(track.id)
+                                            showAddToPlaylistSheet = true
+                                        },
                                         onShowDetails = { selectedDetailsTrack = track },
                                     )
                                 }
@@ -621,33 +702,247 @@ fun LocalSongsScreen(
             },
         )
     }
+
+    // Add to Playlist Bottom Sheet
+    if (showAddToPlaylistSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAddToPlaylistSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+            ) {
+                Text(
+                    text = "Add to playlist",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+
+                // Option: New playlist
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            showAddToPlaylistSheet = false
+                            showCreatePlaylistDialog = true
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            text = "New playlist",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                if (playlists.isEmpty()) {
+                    Text(
+                        text = "No saved playlists yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(playlists, key = { it.id }) { playlist ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.addSelectedToPlaylist(playlist.id) { added, skipped, title ->
+                                            showAddToPlaylistSheet = false
+                                            val msg = when {
+                                                skipped > 0 && added > 0 ->
+                                                    "Added $added track(s) to $title ($skipped duplicates skipped)"
+                                                added > 0 ->
+                                                    "Added $added track(s) to $title"
+                                                skipped > 0 ->
+                                                    "Tracks already in $title"
+                                                else -> "No tracks added"
+                                            }
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.PlaylistAdd,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(14.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = playlist.title,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = "${playlist.tracks.size} tracks",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreatePlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showCreatePlaylistDialog = false
+                newPlaylistName = ""
+            },
+            title = { Text("New Playlist") },
+            text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    label = { Text("Playlist name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val name = newPlaylistName.trim()
+                        if (name.isNotEmpty()) {
+                            viewModel.createPlaylistWithSelected(name) { added, skipped, playlistTitle ->
+                                showCreatePlaylistDialog = false
+                                newPlaylistName = ""
+                                val msg = when {
+                                    skipped > 0 -> "Created playlist \"$playlistTitle\" with $added track(s) ($skipped duplicates skipped)"
+                                    else -> "Created playlist \"$playlistTitle\" with $added track(s)"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    enabled = newPlaylistName.isNotBlank(),
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCreatePlaylistDialog = false
+                        newPlaylistName = ""
+                    },
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun LocalTrackCard(
     track: LocalAudioTrack,
     isPlaying: Boolean,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
     position: GroupPosition,
     onPlay: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onLongClick: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onShowDetails: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
+    val containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+
     Card(
         shape = groupShape(position),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onPlay, onLongClick = { menuExpanded = true })
+                .combinedClickable(
+                    onClick = {
+                        if (isSelectionMode) onToggleSelect() else onPlay()
+                    },
+                    onLongClick = onLongClick,
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect() },
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+            }
+
             Box(Modifier.size(50.dp)) {
                 ArtworkImage(
                     name = track.title,
@@ -670,7 +965,7 @@ private fun LocalTrackCard(
                     Text(
                         text = track.title,
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.SemiBold,
+                        fontWeight = if (isPlaying || isSelected) FontWeight.Bold else FontWeight.SemiBold,
                         color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -720,42 +1015,52 @@ private fun LocalTrackCard(
                 }
             }
 
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        Icons.Filled.MoreVert,
-                        contentDescription = "Song options",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next") },
-                        leadingIcon = { Icon(Icons.Filled.QueueMusic, contentDescription = null) },
-                        onClick = {
-                            onPlayNext()
-                            menuExpanded = false
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Add to Queue") },
-                        leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) },
-                        onClick = {
-                            onAddToQueue()
-                            menuExpanded = false
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Details & Audio Specs") },
-                        leadingIcon = { Icon(Icons.Filled.Album, contentDescription = null) },
-                        onClick = {
-                            onShowDetails()
-                            menuExpanded = false
-                        },
-                    )
+            if (!isSelectionMode) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Song options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Play Next") },
+                            leadingIcon = { Icon(Icons.Filled.QueueMusic, contentDescription = null) },
+                            onClick = {
+                                onPlayNext()
+                                menuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add to Queue") },
+                            leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) },
+                            onClick = {
+                                onAddToQueue()
+                                menuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add to Playlist") },
+                            leadingIcon = { Icon(Icons.Filled.PlaylistAdd, contentDescription = null) },
+                            onClick = {
+                                onAddToPlaylist()
+                                menuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Details & Audio Specs") },
+                            leadingIcon = { Icon(Icons.Filled.Album, contentDescription = null) },
+                            onClick = {
+                                onShowDetails()
+                                menuExpanded = false
+                            },
+                        )
+                    }
                 }
             }
         }

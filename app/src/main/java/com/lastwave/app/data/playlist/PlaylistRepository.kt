@@ -108,8 +108,10 @@ class PlaylistRepository @Inject constructor(
         }
     }
 
-    private suspend fun filterPlayable(tracks: List<GeneratedTrack>): List<GeneratedTrack> =
-        tracks.pinnedWithVideoIds(innerTube)
+    private suspend fun filterPlayable(tracks: List<GeneratedTrack>): List<GeneratedTrack> {
+        val (local, remote) = tracks.partition { it.isLocal }
+        return local + remote.pinnedWithVideoIds(innerTube)
+    }
 
     private val videoIdBackfillOnce = AtomicBoolean(false)
 
@@ -118,7 +120,7 @@ class PlaylistRepository @Inject constructor(
      *  on [exportScope]; playback never waits on it. */
     private fun backfillMissingVideoIdsOnce(loaded: List<SavedPlaylist>) {
         if (loaded.none { playlist ->
-            playlist.tracks.any { it.youtubeVideoIdOrNull() == null && it.name.isNotBlank() }
+            playlist.tracks.any { !it.isLocal && it.youtubeVideoIdOrNull() == null && it.name.isNotBlank() }
         }) return
         if (!videoIdBackfillOnce.compareAndSet(false, true)) return
         exportScope.launch {
@@ -126,8 +128,8 @@ class PlaylistRepository @Inject constructor(
                 var changed = false
                 for (entity in dao.getAll()) {
                     val domain = runCatching { entity.toDomain() }.getOrNull() ?: continue
-                    if (domain.tracks.none { it.youtubeVideoIdOrNull() == null && it.name.isNotBlank() }) continue
-                    val pinned = domain.tracks.pinnedWithVideoIds(innerTube)
+                    if (domain.tracks.none { !it.isLocal && it.youtubeVideoIdOrNull() == null && it.name.isNotBlank() }) continue
+                    val pinned = filterPlayable(domain.tracks)
                     if (pinned.size == domain.tracks.size &&
                         pinned.zip(domain.tracks).all { (newTrack, oldTrack) -> newTrack.url == oldTrack.url }
                     ) continue
@@ -325,13 +327,55 @@ class PlaylistRepository @Inject constructor(
             val playlist = entity.toDomain()
             if (playlist.mode != "custom" && playlist.mode != LIKED_SONGS_MODE) return@withLock playlist
             if ((playlist.mode == LIKED_SONGS_MODE || !allowDuplicate) && playlist.tracks.any { it.sameSongAs(track) }) return@withLock playlist
-            if (track.youtubeVideoIdOrNull() == null && !innerTube.isPlayable(track.name, track.artist)) return@withLock playlist
+            if (!track.isLocal && track.youtubeVideoIdOrNull() == null && !innerTube.isPlayable(track.name, track.artist)) return@withLock playlist
             val updatedTracksJson = json.encodeToString((playlist.tracks + track).map { it.toStored() })
             val updated = entity.copy(tracksJson = updatedTracksJson)
             dao.upsert(updated)
             syncPublicMirror()
             _changes.tryEmit(Unit)
             updated.toDomain()
+        }
+    }
+
+    data class BatchAddResult(
+        val addedCount: Int,
+        val duplicateCount: Int,
+        val playlist: SavedPlaylist?,
+    )
+
+    suspend fun addTracks(
+        id: Long,
+        tracks: List<GeneratedTrack>,
+    ): BatchAddResult {
+        if (tracks.isEmpty()) return BatchAddResult(0, 0, getById(id))
+        awaitStartupSync()
+        return saveMutex.withLock {
+            val entity = dao.getById(id) ?: return@withLock BatchAddResult(0, 0, null)
+            val playlist = entity.toDomain()
+            if (playlist.mode != "custom" && playlist.mode != LIKED_SONGS_MODE) {
+                return@withLock BatchAddResult(0, 0, playlist)
+            }
+
+            val filterResult = com.lastwave.app.data.local.LocalPlaylistHelper.filterDuplicates(
+                existingTracks = playlist.tracks,
+                incomingTracks = tracks,
+            )
+
+            if (filterResult.uniqueTracks.isEmpty()) {
+                return@withLock BatchAddResult(0, filterResult.duplicateCount, playlist)
+            }
+
+            val updatedTracks = playlist.tracks + filterResult.uniqueTracks
+            val updatedTracksJson = json.encodeToString(updatedTracks.map { it.toStored() })
+            val updated = entity.copy(tracksJson = updatedTracksJson)
+            dao.upsert(updated)
+            syncPublicMirror()
+            _changes.tryEmit(Unit)
+            BatchAddResult(
+                addedCount = filterResult.uniqueTracks.size,
+                duplicateCount = filterResult.duplicateCount,
+                playlist = updated.toDomain(),
+            )
         }
     }
 

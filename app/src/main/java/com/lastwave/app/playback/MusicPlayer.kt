@@ -5442,6 +5442,7 @@ class MusicPlayer @Inject constructor(
         if (track.isLocal || !track.playbackUrl.isNullOrBlank()) {
             val localStream = resolveLocalTrackDirectly(track)
             if (localStream != null) return@withContext localStream
+            else throw java.io.FileNotFoundException("Local audio track is inaccessible or was deleted: ${track.playbackUrl}")
         }
         val identityKey = track.playbackIdentity()?.cacheKey
             ?: track.internalTrackId?.takeIf { it.isNotBlank() }
@@ -5486,6 +5487,7 @@ class MusicPlayer @Inject constructor(
         if (track.isLocal || !track.playbackUrl.isNullOrBlank()) {
             val localStream = resolveLocalTrackDirectly(track)
             if (localStream != null) return localStream
+            else throw java.io.FileNotFoundException("Local audio track is inaccessible or was deleted: ${track.playbackUrl}")
         }
         val directId = videoId?.takeIf { it.isNotBlank() } ?: track.videoId?.takeIf { it.isNotBlank() }
         val identity = directId?.let { id ->
@@ -7266,6 +7268,21 @@ private fun MediaItem.toPlayableTrack(): PlayableTrack {
 }
 
 fun GeneratedTrack.toPlayableTrack(): PlayableTrack {
+    if (isLocal || url.startsWith("content://") || url.startsWith("file://") || url.startsWith("local:")) {
+        val cleanUrl = if (url.startsWith("local:")) url.removePrefix("local:") else url
+        return PlayableTrack(
+            title = name,
+            artist = artist,
+            album = album,
+            artworkUrl = artworkUrl,
+            videoId = null,
+            internalTrackId = "local_media_${cleanUrl.hashCode()}",
+            playbackUrl = cleanUrl,
+            playbackMimeType = mimeType,
+            durationMs = durationMs,
+            isLocal = true,
+        )
+    }
     val videoId = youtubeVideoIdOrNull()
     return PlayableTrack(
         title = name,
