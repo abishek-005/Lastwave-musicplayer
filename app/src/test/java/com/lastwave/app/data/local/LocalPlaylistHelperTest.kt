@@ -2,6 +2,7 @@ package com.lastwave.app.data.local
 
 import android.net.Uri
 import com.lastwave.app.data.generate.GeneratedTrack
+import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -9,8 +10,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], manifest = Config.NONE, application = Application::class)
 class LocalPlaylistHelperTest {
 
     @Test

@@ -41,6 +41,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests (audio pipeline + regression)
+        timeout-minutes: 10
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Upload test reports

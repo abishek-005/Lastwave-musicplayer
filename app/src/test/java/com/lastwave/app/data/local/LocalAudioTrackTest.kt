@@ -1,6 +1,7 @@
 package com.lastwave.app.data.local
 
 import android.net.Uri
+import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -8,8 +9,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], manifest = Config.NONE, application = Application::class)
 class LocalAudioTrackTest {
 
     @Test
