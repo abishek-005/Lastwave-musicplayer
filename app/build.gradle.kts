@@ -122,6 +122,31 @@ android {
                 enableV3Signing = true
             } else {
                 initWith(getByName("debug"))
+                val targetStore = storeFile
+                if (targetStore != null && !targetStore.exists()) {
+                    targetStore.parentFile?.mkdirs()
+                    try {
+                        val javaHome = System.getProperty("java.home")
+                        val keytoolPath = listOf(
+                            File(javaHome, "bin/keytool"),
+                            File(javaHome, "bin/keytool.exe"),
+                            File("/usr/bin/keytool"),
+                        ).firstOrNull { it.exists() }?.absolutePath ?: "keytool"
+
+                        ProcessBuilder(
+                            keytoolPath, "-genkeypair", "-v",
+                            "-keystore", targetStore.absolutePath,
+                            "-storepass", "android",
+                            "-alias", "androiddebugkey",
+                            "-keypass", "android",
+                            "-keyalg", "RSA",
+                            "-keysize", "2048",
+                            "-validity", "10000",
+                            "-dname", "CN=Android Debug,O=Android,C=US"
+                        ).redirectErrorStream(true).start().waitFor()
+                    } catch (_: Exception) {
+                    }
+                }
             }
         }
     }
